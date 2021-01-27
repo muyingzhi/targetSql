@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.tianjian.ods.dao.targetdetails.ITargetDetail0603Dao">
+	<sql id="HSPIDS">
+		<foreach collection="hspIds" index="index" item="hsp" open="(" close=")" separator=",">
+			#{hsp}
+		</foreach>
+	</sql>
+	<resultMap id="indicatorsBean" type="com.tianjian.ods.bean.IndicatorsBean"></resultMap>
+    <select id="companyTable" parameterType="Map" resultMap="indicatorsBean">
+		select t1.itemCode itemCode,t1.itemName itemName,
+				case round(ifnull(sum(ifnull(t2.cnt,0)),0.00),2) when 0 then 0 else round(t3.income/sum(ifnull(t2.cnt,0)),2) end as count			 
+				from (select  hsp.id as itemCode,hsp.item_name as itemName, hsp.seq_no as seqNo
+				from hsp.hsp_config_baseinfo hsp
+				where 1=1 
+				and length(hsp.item_code) = 8
+				)t1
+			left join
+		 		(select t.F_DWBH hospital, t.F_ZB_GD cnt from ods.financial_expenditure t
+			    	where 1=1 
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') >= #{startDate}
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') <![CDATA[<]]> #{endDate}
+				) t2
+			on t1.itemCode = t2.hospital
+			left join
+				(select hosin1.parent_item_code hospital,SUM(hosin2.income) income
+      				from (SELECT parent_item_code,item_code
+			 				FROM hsp.hsp_config_baseinfo
+			 				where LENGTH(item_code) = 10
+      				 ) hosin1
+      				inner join 
+						(SELECT	Hospital as hospital,round(IFNULL(SUM(Outp),0)+IFNULL(SUM(Inp),0)+IFNULL(sum(physical_exam),0),2) AS income
+							FROM ods.ODS_HOSPITAL_INCOME force index(hospital_income_sumindex)
+							WHERE 1=1 AND visit_date >= #{startDate}
+							AND visit_date <![CDATA[<]]> #{endDate}
+							group by Hospital) hosin2 
+					on hosin1.item_code = hosin2.hospital
+					group by hosin1.parent_item_code
+					union 
+		  			SELECT	Hospital as hospital,round(IFNULL(SUM(Outp),0)+IFNULL(SUM(Inp),0)+IFNULL(sum(physical_exam),0),2) AS income
+						FROM ods.ODS_HOSPITAL_INCOME force index(hospital_income_sumindex)
+						WHERE 1=1 AND visit_date >= #{startDate}
+						AND visit_date <![CDATA[<]]> #{endDate}
+						group by Hospital) t3
+			on t1.itemCode = t3.hospital 
+			where t1.itemCode in <include refid="HSPIDS"></include> 
+			group by t1.itemCode
+			order by t1.seqNo;
+	</select>
+<!-- 同级对比页面列表 -->
+<select id="hspTable" parameterType="Map" resultMap="indicatorsBean">
+select t1.item_code as itemCode, t1.item_name as itemName,
+case round(ifnull(sum(ifnull(t2.cnt,0)),0.00),2) when 0 then 0 else round(t3.income/sum(ifnull(t2.cnt,0)),2) end as count			 
+from hsp.hsp_config_baseinfo t1
+left join
+(select t.F_DWBH hospital, t.F_ZB_GD cnt from ods.financial_expenditure t
+  	where 1=1 
+	AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') >= #{startDate}
+	AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') <![CDATA[<]]> #{endDate}
+) t2
+on t1.item_code = t2.hospital
+left join
+(SELECT	Hospital as hospital,round(IFNULL(SUM(Outp),0)+IFNULL(SUM(Inp),0)+IFNULL(sum(physical_exam),0),2) AS income
+		FROM ods.ODS_HOSPITAL_INCOME force index(hospital_income_sumindex)
+		WHERE 1=1 AND visit_date >= #{startDate}
+		AND visit_date <![CDATA[<]]> #{endDate}
+		group by Hospital
+) t3
+on t1.item_code = t3.hospital 
+where length(t1.item_code)=10
+and t1.id in <include refid="HSPIDS"></include> 
+group by t1.item_code
+order by count desc
+</select>
+<!-- 同级平均值 -->
+<select id="hspLevelAvg" parameterType="Map" resultMap="indicatorsBean">
+ select NULL itemCode,NULL  itemName,NULL count from dual WHERE 1!=1;
+</select>
+
+<select id="firstRequestTable" parameterType="Map" resultMap="indicatorsBean">
+select t1.itemCode itemCode,t1.itemName itemName,
+				case round(ifnull(sum(ifnull(t2.cnt,0)),0.00),2) when 0 then 0 else round(t3.income/sum(ifnull(t2.cnt,0)),2) end as count			 
+				from (select  hsp.id as itemCode,hsp.item_name as itemName, hsp.seq_no as seqNo
+				from hsp.hsp_config_baseinfo hsp
+				where 1=1 
+				and length(hsp.item_code) = 10
+				)t1
+			left join
+		 		(select t.F_DWBH hospital, t.F_ZB_GD cnt from ods.financial_expenditure t
+			    	where 1=1 
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') >= #{startDate}
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') <![CDATA[<]]> #{endDate}
+				) t2
+			on t1.itemCode = t2.hospital
+			left join
+				( SELECT	Hospital as hospital,round(IFNULL(SUM(Outp),0)+IFNULL(SUM(Inp),0)+IFNULL(sum(physical_exam),0),2) AS income
+						FROM ods.ODS_HOSPITAL_INCOME force index(hospital_income_sumindex)
+						WHERE 1=1 AND visit_date >= #{startDate}
+						AND visit_date <![CDATA[<]]> #{endDate}
+						group by Hospital) t3
+			on t1.itemCode = t3.hospital 
+			where t1.itemCode in 
+			(select id from hsp.hsp_config_baseinfo where parent_item_code = #{parentId} and id in <include refid="HSPIDS"></include> and length(item_code)=10) 
+			group by t1.itemCode
+			order by t1.seqNo;
+
+</select>
+
+<select id="getSecondData" parameterType="Map" resultMap="indicatorsBean">
+
+</select>
+<select id="getThirdData"  parameterType="Map" resultMap="indicatorsBean">
+
+</select>
+    <select id="comparedEcharts" parameterType="Map" resultMap="indicatorsBean">
+		select t1.itemCode itemCode,t1.itemName itemName,
+				case round(ifnull(sum(ifnull(t2.newCnt,0)),0.00),2) when 0 then 0 else round(t3.newIncome/sum(ifnull(t2.newCnt,0)),2) end as countNew,			 
+				case round(ifnull(sum(ifnull(t2.oldCnt,0)),0.00),2) when 0 then 0 else round(t3.oldIncome/sum(ifnull(t2.oldCnt,0)),2) end as countOld
+				from (select  hsp.id as itemCode,hsp.item_name as itemName, hsp.seq_no as seqNo
+				from hsp.hsp_config_baseinfo hsp 
+				) t1
+			left join
+		 		(select newCnt.hospital hospital,newCnt.cnt newCnt,oldCnt.cnt oldCnt from
+					(select t.F_DWBH hospital, sum(t.F_ZB_GD) cnt from ods.financial_expenditure t
+			    	where 1=1 
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') >= #{startDate}
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') <![CDATA[<]]> #{endDate}
+					group by F_DWBH) newCnt
+				left join 
+				 (select t.F_DWBH hospital, sum(t.F_ZB_GD) cnt from ods.financial_expenditure t
+			    	where 1=1 
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') >= concat(date_format(#{startDate},'%Y')- 1,date_format(#{startDate},'-%m-%d'))
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') <![CDATA[<]]> concat(date_format(#{endDate},'%Y') - 1 ,date_format(#{endDate},'-%m-%d'),' 23:59:59.0')
+				    group by F_DWBH) oldCnt 
+					on newCnt.hospital=oldCnt.hospital
+				) t2
+			on t1.itemCode = t2.hospital
+			left join
+				(select new.hospital hospital,new.income newIncome,old.income oldIncome from 
+						(SELECT	Hospital as hospital,round(IFNULL(SUM(Outp),0)+IFNULL(SUM(Inp),0)+IFNULL(sum(physical_exam),0),2) AS income
+						FROM ods.ODS_HOSPITAL_INCOME force index(hospital_income_sumindex)
+						WHERE 1=1 AND visit_date >= #{startDate}
+						AND visit_date <![CDATA[<]]> #{endDate}
+						group by Hospital) new
+				left join 
+				(SELECT	Hospital as hospital,round(IFNULL(SUM(Outp),0)+IFNULL(SUM(Inp),0)+IFNULL(sum(physical_exam),0),2) AS income
+						FROM ods.ODS_HOSPITAL_INCOME force index(hospital_income_sumindex)
+						WHERE 1=1 AND visit_date >= concat(date_format(#{startDate},'%Y')- 1,date_format(#{startDate},'-%m-%d'))
+						AND visit_date <![CDATA[<]]> concat(date_format(#{endDate},'%Y') - 1 ,date_format(#{endDate},'-%m-%d'),' 23:59:59.0')
+						group by Hospital) old on new.hospital=old.hospital
+						) t3
+			on t1.itemCode = t3.hospital 
+			where t1.itemCode in <include refid="HSPIDS"></include> 
+			and length(t1.itemCode)=10 
+			group by t1.itemCode
+			order by t1.seqNo;
+
+	</select>
+    <select id="pieEcharts1" parameterType="Map" resultMap="indicatorsBean">
+
+</select>
+<select id="pieEcharts2" parameterType="Map" resultMap="indicatorsBean">
+	
+</select>
+<select id="lineEcharts" parameterType="Map" resultMap="indicatorsBean">
+select t1.itemCode itemCode,t1.itemName itemName,t2.dateData dateData,
+				case round(ifnull(sum(ifnull(t2.cnt,0)),0.00),2) when 0 then 0 else round(t3.income/sum(ifnull(t2.cnt,0)),2) end as count			 
+				from (select  hsp.id as itemCode,hsp.item_name as itemName, hsp.seq_no as seqNo
+				from hsp.hsp_config_baseinfo hsp
+				where 1=1 
+				and length(hsp.item_code) = 10
+				)t1
+			left join
+		 		(select t.F_DWBH hospital, date_format(str_to_date(CONCAT(t.F_DATE,'01'), '%Y%m%d'),#{dateFormater})  dateData,
+		 		t.F_ZB_GD cnt from ods.financial_expenditure t
+			    	where 1=1 
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') >= #{startDate}
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') <![CDATA[<]]> #{endDate}
+				) t2
+			on t1.itemCode = t2.hospital
+			left join
+				(SELECT	Hospital as hospital,round(IFNULL(SUM(Outp),0)+IFNULL(SUM(Inp),0)+IFNULL(sum(physical_exam),0),2) AS income
+						FROM ods.ODS_HOSPITAL_INCOME force index(hospital_income_sumindex)
+						WHERE 1=1 AND visit_date >= #{startDate}
+						AND visit_date <![CDATA[<]]> #{endDate}
+						group by Hospital) t3
+			on t1.itemCode = t3.hospital 
+			where t1.itemCode in <include refid="HSPIDS"></include> 
+			group by t1.itemCode
+			order by t1.seqNo;
+
+</select>
+	<!-- 同比同级别 -->
+	<select id="comparedEchartsAvg" parameterType="Map" resultMap="indicatorsBean">
+	select t1.itemCode itemCode,t1.itemName itemName,
+				case round(ifnull(sum(ifnull(t2.newCnt,0)),0.00),2) when 0 then 0 else round(t3.newIncome/sum(ifnull(t2.newCnt,0)),2) end as countNew,			 
+				case round(ifnull(sum(ifnull(t2.oldCnt,0)),0.00),2) when 0 then 0 else round(t3.oldIncome/sum(ifnull(t2.oldCnt,0)),2) end as countOld
+				from (select  hsp.id as itemCode,hsp.item_name as itemName, hsp.seq_no as seqNo,hsp.comm_config_unitgrade_id
+				from hsp.hsp_config_baseinfo hsp 
+				) t1
+			left join
+		 		(select newCnt.hospital hospital,newCnt.cnt newCnt,oldCnt.cnt oldCnt from
+					(select t.F_DWBH hospital, sum(t.F_ZB_GD) cnt from ods.financial_expenditure t
+			    	where 1=1 
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') >= #{startDate}
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') <![CDATA[<]]> #{endDate}
+					group by F_DWBH) newCnt
+				left join 
+				 (select t.F_DWBH hospital, sum(t.F_ZB_GD) cnt from ods.financial_expenditure t
+			    	where 1=1 
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') >= concat(date_format(#{startDate},'%Y')- 1,date_format(#{startDate},'-%m-%d'))
+					AND str_to_date(CONCAT (t.F_DATE,'01'), '%Y%m%d') <![CDATA[<]]> concat(date_format(#{endDate},'%Y') - 1 ,date_format(#{endDate},'-%m-%d'),' 23:59:59.0')
+				    group by F_DWBH) oldCnt 
+					on newCnt.hospital=oldCnt.hospital
+				) t2
+			on t1.itemCode = t2.hospital
+			left join
+				(select new.hospital hospital,new.income newIncome,old.income oldIncome from 
+						(SELECT	Hospital as hospital,round(IFNULL(SUM(Outp),0)+IFNULL(SUM(Inp),0)+IFNULL(sum(physical_exam),0),2) AS income
+						FROM ods.ODS_HOSPITAL_INCOME force index(hospital_income_sumindex)
+						WHERE 1=1 AND visit_date >= #{startDate}
+						AND visit_date <![CDATA[<]]> #{endDate}
+						group by Hospital) new
+				left join 
+				(SELECT	Hospital as hospital,round(IFNULL(SUM(Outp),0)+IFNULL(SUM(Inp),0)+IFNULL(sum(physical_exam),0),2) AS income
+						FROM ods.ODS_HOSPITAL_INCOME force index(hospital_income_sumindex)
+						WHERE 1=1 AND visit_date >= concat(date_format(#{startDate},'%Y')- 1,date_format(#{startDate},'-%m-%d'))
+						AND visit_date <![CDATA[<]]> concat(date_format(#{endDate},'%Y') - 1 ,date_format(#{endDate},'-%m-%d'),' 23:59:59.0')
+						group by Hospital) old on new.hospital=old.hospital
+			) t3
+			on t1.itemCode = t3.hospital 
+			where 1=1
+			and t1.comm_config_unitgrade_id=(select comm_config_unitgrade_id from hsp.hsp_config_baseinfo 
+			where item_Name=#{hspName})
+			and length(t1.itemCode)=10 
+			group by t1.itemCode
+			order by t1.seqNo;
+
+	</select>
+</mapper>

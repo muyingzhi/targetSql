@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.tianjian.ods.dao.targetdetails.ITargetDetail0307Dao">
+	<sql id="HSPIDS">
+		<foreach collection="hspIds" index="index" item="hsp" open="(" close=")" separator=",">
+			#{hsp}
+		</foreach>
+	</sql>
+	<resultMap id="indicatorsBean" type="com.tianjian.ods.bean.IndicatorsBean"></resultMap>
+    <select id="companyTable" parameterType="Map" resultMap="indicatorsBean">
+    	select t1.parentItemCode itemCode,t1.parentItemName itemName,sum(ifnull(t2.cnt,0)) count
+		from
+		  (
+		    select hcb.id as itemCode, hcb.item_name as itemName, parent.id as parentItemCode, parent.item_name as parentItemName, hcb.seq_no as seqNo
+			from hsp.hsp_config_baseinfo hcb, hsp.hsp_config_baseinfo parent
+			where hcb.parent_item_code = parent.id 
+		and hcb.id in <include refid="HSPIDS"></include>
+		and length(hcb.item_code)=10
+		) t1
+		  left join
+		  (
+		    select t.hospital hospital, sum(Inp_critical_death_count) cnt
+		    from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		    where t.hospital in <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<]]> #{endDate} 
+			group by t.hospital
+		  ) t2
+		  on t1.itemCode = t2.hospital
+		where t2.cnt>0
+		group by t1.parentItemName
+		order by t1.seqNo
+</select>
+	<!-- 同级对比页面列表 -->
+	<select id="hspTable" parameterType="Map" resultMap="indicatorsBean">
+	 select t1.item_code itemCode,t1.item_name itemName,sum(ifnull(t2.cnt,0)) count
+		from hsp.hsp_config_baseinfo t1
+		left join
+		( select t.hospital hospital, sum(Inp_critical_death_count) cnt
+		    from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		    where t.hospital in <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<]]> #{endDate} 
+			group by t.hospital
+		) t2
+		on t1.item_code = t2.hospital
+		where length(t1.item_code)=10
+		and t1.id in <include refid="HSPIDS"></include>
+		and t2.cnt>0
+		group by t1.item_code
+		order by count desc;
+	</select>
+	<!-- 同级平均值 -->
+	<select id="hspLevelAvg" parameterType="Map" resultMap="indicatorsBean">
+	 select t1.comm_config_unitgrade_id itemCode,
+			case t1.comm_config_unitgrade_id 
+			 when 1 then "一级医院" 
+			 when 2 then "二级医院" 
+			 when 3 then "三级医院"   
+			 when 4 then "社区医院" 
+			 else "" end  itemName,
+		round(sum(ifnull(t2.cnt,0))/sum( case when t2.cnt>0 then 1 else 0 end),0) count
+		from hsp.hsp_config_baseinfo t1
+		left join
+		( select t.hospital hospital, sum(Inp_critical_death_count) cnt
+		    from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		    where t.hospital in <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<]]> #{endDate} 
+			group by t.hospital
+		) t2
+		on t1.item_code = t2.hospital
+		where  t1.id in <include refid="HSPIDS"></include>
+		and t1.comm_config_unitgrade_id is not null and  t1.comm_config_unitgrade_id!=""
+		and length(t1.item_code)=10
+		and t2.cnt>0
+		group by t1.comm_config_unitgrade_id
+	</select>
+<select id="firstRequestTable" parameterType="Map" resultMap="indicatorsBean">
+
+		
+		select t1.itemCode itemCode,t1.itemName itemName,ifnull(t2.cnt,0) count
+		from
+		  (
+		    select hcb.id as itemCode, hcb.item_name as itemName, hcb.seq_no as seqNo
+			from hsp.hsp_config_baseinfo hcb
+			where hcb.parent_item_code = #{parentId}
+		and hcb.id in <include refid="HSPIDS"></include>
+		and length(hcb.item_code)=10
+		  ) t1
+		  left join
+		  (
+		    select t.hospital hospital, sum(Inp_critical_death_count) cnt
+		    from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		    where t.hospital in (select id from hsp.hsp_config_baseinfo where parent_item_code = #{parentId} and id in <include refid="HSPIDS"></include> and length(item_code)=10)
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<]]> #{endDate} 
+			group by t.hospital
+		  ) t2
+		  on t1.itemCode = t2.hospital
+		where t2.cnt>0
+		order by t1.seqNo
+	</select>
+    <select id="getSecondData" parameterType="Map" resultMap="indicatorsBean">
+		select t1.itemCode itemCode,t1.itemName itemName,ifnull(t2.cnt,0) count from
+		 (
+		 	select concat(b.hospital,'-',b.dept_code) itemCode,b.dept_name itemName
+		 	from ods.dept_dict b
+		 	where b.hospital=#{hspId}
+		 ) t1
+		 left join
+		 (
+		 	select concat(t.hospital,'-',t.dept_code) itemCode,SUM(Inp_critical_death_count) cnt 
+		 	from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex) 
+		 	where t.hospital= #{hspId}
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<]]> #{endDate} 
+		 	group by concat(t.hospital,'-',t.dept_code)
+		 ) t2
+		 on t1.itemCode=t2.itemCode
+		where t2.cnt>0
+		 order by ifnull(t2.cnt,0) desc
+	</select>
+    <select id="getThirdData"  parameterType="Map" resultMap="indicatorsBean">
+		select t1.itemCode itemCode,t1.itemName itemName,ifnull(t2.cnt,0)count from
+		 (
+		 	select sd.hospital||'-'||sd.dept_code||'-'||sd.emp_no as itemCode,sd.name as itemName
+		 	from dc.staff_dict sd
+		 	where sd.hospital=#{hspId} and sd.dept_code=#{deptCode}
+		 ) t1
+		 left join
+		 (
+		 	select t.hospital||'-'||t.dept_code||'-'||t.doctor itemCode,count(*)cnt
+		 	from dc.inp_visit_record t
+		 	where t.hospital=#{hspId} and t.dept_code=#{deptCode}
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<=]]> #{endDate} + 1
+			and Emer_treat_times is not null and Death_date_time is not null and Admission_date_time is not null
+		 	group by t.hospital||'-'||t.dept_code||'-'||t.doctor
+		  ) t2
+		  on t1.itemCode=t2.itemCode
+		  order by ifnull(t2.cnt,0) desc
+	</select>
+    <select id="comparedEcharts" parameterType="Map" resultMap="indicatorsBean">
+		 select hsp.id,hsp.item_Name itemName,
+		(select sum(Inp_critical_death_count) thisYear
+		from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		where
+		t.visit_date>= #{startDate}
+		and t.visit_date <![CDATA[<]]> #{endDate}
+		and hospital=hsp.id) countNew,
+		(select sum(Inp_critical_death_count)
+		from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		where
+		t.visit_date>= concat(cast(date_format(#{startDate},'%Y') - 1 as CHAR),date_format(#{startDate},'-%m-%d'))
+		and t.visit_date <![CDATA[<]]> concat(cast(date_format(#{endDate},'%Y') - 1 as CHAR),date_format(#{endDate},'-%m-%d'),' 23:59:59.0')
+		and hospital=hsp.id) countOld
+		from hsp.hsp_config_baseinfo hsp
+		where hsp.id in <include refid="HSPIDS"></include>
+	</select>
+    <select id="pieEcharts1" parameterType="Map" resultMap="indicatorsBean">
+		select t1.itemCode itemCode,t1.itemName itemName,ifnull(t2.cnt,0) count
+		from
+			(select hcb.id as itemCode, hcb.item_name as itemName
+			from hsp.hsp_config_baseinfo hcb
+		 	where hcb.id IN <include refid="HSPIDS"></include>
+		  	and length(hcb.id)=10) t1
+			left join
+			(select t.hospital hospital, SUM(Inp_critical_death_count) cnt
+			from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex) 
+		  	where t.hospital IN <include refid="HSPIDS"></include>
+				and t.visit_date >= #{startDate}
+		and t.visit_date<![CDATA[<]]> #{endDate}
+			group by t.hospital
+			) t2
+			on t1.itemCode = t2.hospital
+		order by t1.itemCode
+	</select>
+    <select id="pieEcharts2" parameterType="Map" resultMap="indicatorsBean">
+		select t1.itemName itemName,ifnull(t2.count,0) count
+		from
+			(
+			select t.charge_type itemName, count(*) count
+			from dc.inp_visit_record t
+			where t.hospital IN <include refid="HSPIDS"></include>
+			group by t.charge_type) t1
+			left join
+			(
+			select t.charge_type itemName, count(*) count
+			from dc.inp_visit_record t
+			where t.hospital IN <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<=]]> #{endDate}
+			and Emer_treat_times is not null and Death_date_time is not null and Admission_date_time is not null
+			group by t.charge_type) t2
+			on t1.itemName = t2.itemName
+		order by t1.itemName
+	</select>
+    <select id="lineEcharts" parameterType="Map" resultMap="indicatorsBean">
+		 select t1.itemCode itemCode,t1.itemName itemName,t2.dateData dateData,ifnull(t2.cnt,0) count
+			from
+            (
+            select hcb.id as itemCode, hcb.item_name as itemName from hsp.hsp_config_baseinfo hcb
+            where hcb.id IN <include refid="HSPIDS"></include>
+            and length(hcb.id)=10
+            ) t1
+            left join
+            (
+            select t.hospital hospital, date_format(t.VISIT_DATE,#{dateFormater})  dateData, SUM(Inp_critical_death_count) cnt
+		    from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		    where t.hospital IN <include refid="HSPIDS"></include>
+		   AND visit_date >= #{startDate}
+		AND visit_date <![CDATA[<]]> #{endDate}
+			group by t.hospital,dateData 
+			) t2
+			on t1.itemCode = t2.hospital
+        order by t1.itemCode
+	</select>
+<!-- 同比同级别 -->
+	<select id="comparedEchartsAvg" parameterType="Map" resultMap="indicatorsBean">
+	   select hsp.id,hsp.item_Name itemName,
+		(select sum(Inp_critical_death_count) thisYear
+		from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		where
+		t.visit_date>= #{startDate}
+		and t.visit_date <![CDATA[<]]> #{endDate}
+		and hospital=hsp.id) countNew,
+		(select sum(Inp_critical_death_count)
+		from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		where
+		t.visit_date>= concat(cast(date_format(#{startDate},'%Y') - 1 as CHAR),date_format(#{startDate},'-%m-%d'))
+		and t.visit_date <![CDATA[<]]> concat(cast(date_format(#{endDate},'%Y') - 1 as CHAR),date_format(#{endDate},'-%m-%d'),' 23:59:59.0')
+		and hospital=hsp.id) countOld
+		from hsp.hsp_config_baseinfo hsp
+        where LENGTH(hsp.id)=10
+		and  hsp.comm_config_unitgrade_id=(select comm_config_unitgrade_id from hsp.hsp_config_baseinfo 
+		where item_Name=#{hspName})
+	</select>
+</mapper>

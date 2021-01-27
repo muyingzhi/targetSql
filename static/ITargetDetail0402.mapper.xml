@@ -1,0 +1,420 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.tianjian.ods.dao.targetdetails.ITargetDetail0402Dao">
+	<sql id="HSPIDS">
+		<foreach collection="hspIds" index="index" item="hsp" open="(" close=")" separator=",">
+			#{hsp}
+		</foreach>
+	</sql>
+	<resultMap id="indicatorsBean" type="com.tianjian.ods.bean.IndicatorsBean"></resultMap>
+    <select id="companyTable" parameterType="Map" resultMap="indicatorsBean">
+    	select t1.parentItemCode itemCode,t1.parentItemName itemName,	
+ 		round(case when sum(IFNULL(t3.cnt3,0))=0 then 0 else sum(IFNULL(t2.cnt2,0))/sum(t3.cnt3) * 1.00 end,2) count
+          
+		from
+		  (
+		    select t.hospital hospital, sum(Inp_bed_day) cnt2
+		    from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex)
+		    where t.hospital in <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<]]> #{endDate} 
+			group by t.hospital	
+		  ) t2
+		left join
+		(
+		select hcb.id as itemCode, hcb.item_name as itemName, parent.id as parentItemCode, parent.item_name as parentItemName, hcb.seq_no as seqNo
+			from hsp.hsp_config_baseinfo hcb, hsp.hsp_config_baseinfo parent
+			where hcb.parent_item_code = parent.id 
+		and hcb.id in <include refid="HSPIDS"></include>
+		and length(hcb.item_code)=10
+		) t1
+		  on t1.itemCode = t2.hospital
+		  
+		   left join
+		  (
+		    select t.hospital hospital, sum(Bed_count) cnt3
+		    from  ods.ODS_HOSPITAL_RESOURCE_NEW t
+		    where t.hospital in <include refid="HSPIDS"></include>
+		    AND DATE_FORMAT(Year,'%Y')= DATE_FORMAT(#{endDate},'%Y')
+		
+			group by t.hospital	
+		  ) t3
+		  on t1.itemCode = t3.hospital
+		  
+		  <!-- where t2.cnt2 -->
+		group by t1.parentItemName
+		order by t1.seqNo
+    
+	</select>
+	<!-- 同级对比页面列表 -->
+	<select id="hspTable" parameterType="Map" resultMap="indicatorsBean">
+	 select t1.item_code itemCode,t1.item_name itemName,
+		round(case when sum(IFNULL(t3.cnt3,0))=0 then 0 else sum(IFNULL(t2.cnt2,0))/sum(t3.cnt3) * 1.00 end,2) count
+		from hsp.hsp_config_baseinfo t1
+		left join
+		(select t.hospital hospital, sum(Inp_bed_day) cnt2
+		    from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex)
+		    where t.hospital in <include refid="HSPIDS"></include>
+			  and t.visit_date >= #{startDate}
+			  and t.visit_date<![CDATA[<]]> #{endDate} 
+			  group by t.hospital	
+		) t2
+		on t1.item_code = t2.hospital
+		left join
+		(select t.hospital hospital, sum(Bed_count) cnt3
+		    from  ods.ODS_HOSPITAL_RESOURCE_NEW t
+		    where t.hospital in <include refid="HSPIDS"></include>
+		    AND DATE_FORMAT(Year,'%Y')= DATE_FORMAT(#{endDate},'%Y')
+			  group by t.hospital	
+		) t3
+		on t1.item_code = t3.hospital
+		where length(t1.item_code)=10
+		and t1.id in <include refid="HSPIDS"></include>
+		and t2.cnt2>0
+		group by t1.item_code
+		order by count desc
+	</select>
+	<!-- 同级平均值 -->
+	<select id="hspLevelAvg" parameterType="Map" resultMap="indicatorsBean">
+	 select t1.comm_config_unitgrade_id itemCode,
+			case t1.comm_config_unitgrade_id 
+			 when 1 then "一级医院" 
+			 when 2 then "二级医院" 
+			 when 3 then "三级医院"   
+			 when 4 then "社区医院" 
+			 else "" end  itemName,
+		round(sum(ifnull(t2.cnt,0))/sum( case when t2.cnt>0 then 1 else 0 end),2) count
+		from hsp.hsp_config_baseinfo t1
+		left join
+		( select t1.item_code hospital,
+		round(case when sum(IFNULL(t3.cnt3,0))=0 then 0 else sum(IFNULL(t2.cnt2,0))/sum(t3.cnt3) * 1.00 end,2) cnt
+		from hsp.hsp_config_baseinfo t1
+		left join
+		(select t.hospital hospital, sum(Inp_bed_day) cnt2
+		    from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex)
+		    where t.hospital in <include refid="HSPIDS"></include>
+			  and t.visit_date >= #{startDate}
+			  and t.visit_date<![CDATA[<]]> #{endDate} 
+			  group by t.hospital	
+		) t2
+		on t1.item_code = t2.hospital
+		left join
+		(select t.hospital hospital, sum(Bed_count) cnt3
+		    from  ods.ODS_HOSPITAL_RESOURCE_NEW t
+		    where t.hospital in <include refid="HSPIDS"></include>
+		    AND DATE_FORMAT(Year,'%Y')= DATE_FORMAT(#{endDate},'%Y')
+			  group by t.hospital	
+		) t3
+		on t1.item_code = t3.hospital
+		where length(t1.item_code)=10
+		and t1.id in <include refid="HSPIDS"></include>
+		and t2.cnt2>0
+		group by t1.item_code
+		) t2
+		on t1.item_code = t2.hospital
+		where  t1.id in <include refid="HSPIDS"></include>
+		and t1.comm_config_unitgrade_id is not null and  t1.comm_config_unitgrade_id!=""
+		and length(t1.item_code)=10
+		and t2.cnt>0
+		group by t1.comm_config_unitgrade_id;
+	</select>
+<select id="firstRequestTable" parameterType="Map" resultMap="indicatorsBean">
+    
+    
+     select t1.itemCode itemCode,t1.itemName itemName, 			
+ round(case when IFNULL(t3.cnt3,0)=0 then 0 else IFNULL(t2.cnt2,0)/t3.cnt3 * 1.00 end,2) count
+          
+		from
+		  (
+		    select t.hospital hospital, sum(Inp_bed_day) cnt2
+		    from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex)
+		    where t.hospital in (select id from hsp.hsp_config_baseinfo where parent_item_code = #{parentId} and id in <include refid="HSPIDS"></include> and length(item_code)=10)
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<]]> #{endDate} 
+			group by t.hospital	
+		  ) t2
+		left join
+		(
+			select hcb.id as itemCode, hcb.item_name as itemName, hcb.seq_no as seqNo
+			from hsp.hsp_config_baseinfo hcb
+			where hcb.parent_item_code = #{parentId}
+		and hcb.id in <include refid="HSPIDS"></include>
+		and length(hcb.item_code)=10
+		) t1
+		  on t1.itemCode = t2.hospital
+		  
+		   left join
+		  (
+		    select t.hospital hospital, sum(Bed_count) cnt3
+		    from  ods.ODS_HOSPITAL_RESOURCE_NEW t
+		    where t.hospital in (select id from hsp.hsp_config_baseinfo where parent_item_code = #{parentId} and id in <include refid="HSPIDS"></include> and length(item_code)=10)
+		    AND DATE_FORMAT(Year,'%Y')= DATE_FORMAT(#{endDate},'%Y')
+		
+			group by t.hospital	
+		  ) t3
+		  on t1.itemCode = t3.hospital
+		  
+		  <!-- where t2.cnt2 -->
+		order by t1.seqNo
+    
+
+	</select>
+    <select id="getSecondData" parameterType="Map" resultMap="indicatorsBean">
+    
+        select t1.itemCode itemCode,t1.itemName itemName,
+        round(case when IFNULL(t3.cnt3,0)=0 then 0 else IFNULL(t2.cnt2,0)/t3.cnt3 * 1.00 end,2) count 
+        
+        from
+		 (
+		 	select concat(t.hospital,'-',t.dept_code) itemCode,sum(Inp_bed_day) cnt2 
+		 	from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex) 
+		 	where t.hospital= #{hspId}
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<]]> #{endDate} 
+		 	group by concat(t.hospital,'-',t.dept_code)
+		 ) t2
+		left join
+		(
+			select concat(b.hospital,'-',b.dept_code) itemCode,b.dept_name itemName
+			from ods.dept_dict b
+			where b.hospital=#{hspId}
+		) t1
+		on t1.itemCode=t2.itemCode
+		left join
+		 (
+		 	select concat(t.hospital,'-',t.dept_code) itemCode,sum(Bed_count) cnt3
+		 	from  ods.ODS_HOSPITAL_RESOURCE_NEW t 
+		 	where t.hospital= #{hspId}
+		    AND DATE_FORMAT(Year,'%Y') = DATE_FORMAT(#{endDate},'%Y')
+		 	group by concat(t.hospital,'-',t.dept_code)
+		 ) t3
+		 on t1.itemCode=t3.itemCode
+		 where t2.cnt2>0
+		 order by count desc
+    
+
+	</select>
+    <select id="getThirdData"  parameterType="Map" resultMap="indicatorsBean">
+		select t1.itemCode itemCode,t1.itemName itemName,ifnull(t2.cnt,0)count from
+		 (
+		 	select sd.hospital||'-'||sd.dept_code||'-'||sd.emp_no as itemCode,sd.name as itemName
+		 	from dc.staff_dict sd
+		 	where sd.hospital=#{hspId} and sd.dept_code=#{deptCode}
+		 ) t1
+		 left join
+		 (
+		  select hospital itemCode,round(case when IFNULL(t1.count,0)=0 then 0.00 else IFNULL(t.count,0)/IFNULL(t1.count,0)*1.00 end,2) cnt from (
+		 SELECT hospital'-'||t.dept_code||'-'||t.doctor hospital,
+		IFNULL(sum(DATEDIFF(Discharge_date_time,Admission_date_time)),0) count
+		FROM dc.inp_visit_record
+		WHERE 1=1
+		and  Discharge_date_time is not null
+		AND substr(Hospital,1,LENGTH ('${hspId}'))= #{hspId}
+		AND Discharge_date_time >= #{startDate}
+		AND Discharge_date_time <![CDATA[<=]]> #{endDate}
+		GROUP BY hospital'-'||t.dept_code||'-'||t.doctor) t
+		right join
+		(SELECT hospital'-'||t.dept_code||'-'||t.doctor hospital,
+			count(*) count
+		FROM dc.bed_record
+		WHERE 1=1
+
+		AND substr(Hospital,1,LENGTH ('${hspId}'))= #{hspId}
+		AND Discharge_date_time >= #{startDate}
+		AND Discharge_date_time <![CDATA[<=]]> #{endDate}
+		GROUP BY hospital'-'||t.dept_code||'-'||t.doctor
+		) t1 on t.hospital=t1.hospital
+		  ) t2
+		  on t1.itemCode=t2.itemCode
+		  order by ifnull(t2.cnt,0) desc
+	</select>
+    <select id="comparedEcharts" parameterType="Map" resultMap="indicatorsBean">
+    
+    
+    SELECT id,itemname,ROUND(CASE WHEN IFNULL(this_times,0)=0 THEN 0 ELSE this_days/this_times END ,2) countNew,
+	ROUND(CASE WHEN IFNULL(last_times,0)=0 THEN 0 ELSE last_days/last_times END ,2) countOld
+FROM(
+SELECT 
+  hsp.id 
+
+ AS id,
+  hsp.item_Name itemName,
+       (SELECT SUM(Inp_bed_day) InpBedDay
+       from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex) 
+      WHERE t.visit_date >= #{startDate} 
+        AND t.visit_date  <![CDATA[<]]> #{endDate}
+        AND hospital=hsp.id 
+
+        ) this_days
+        ,
+      (SELECT sum(Bed_count) BedCount   FROM ods.ODS_HOSPITAL_RESOURCE_NEW t
+        where DATE_FORMAT(YEAR, '%Y')  = DATE_FORMAT(#{endDate}, '%Y')
+        AND hospital=hsp.id 
+
+	) this_times,
+    (SELECT SUM(Inp_bed_day) InpBedDay
+       from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex) 
+      WHERE t.visit_date >= CONCAT(DATE_FORMAT(#{startDate},'%Y')-1 ,DATE_FORMAT(#{startDate},'-%m-%d'),' 00:00:00.0')
+        AND t.visit_date  <![CDATA[<]]> CONCAT(DATE_FORMAT(#{endDate},'%Y')-1 ,DATE_FORMAT(#{endDate},'-%m-%d'),' 23:59:59.0')
+        AND hospital=hsp.id 
+
+        ) last_days
+        ,
+      (SELECT sum(Bed_count) BedCount   FROM ods.ODS_HOSPITAL_RESOURCE_NEW t
+      WHERE  DATE_FORMAT(YEAR, '%Y')  = (DATE_FORMAT(#{endDate}, '%Y') -1)
+        AND hospital=hsp.id 
+
+	) last_times
+FROM hsp.hsp_config_baseinfo hsp  
+  WHERE hsp.id in <include refid="HSPIDS"></include>
+ ) a
+
+	</select>
+    <select id="pieEcharts1" parameterType="Map" resultMap="indicatorsBean">
+		
+	</select>
+    <select id="pieEcharts2" parameterType="Map" resultMap="indicatorsBean">
+
+    </select>
+    <select id="lineEcharts" parameterType="Map" resultMap="indicatorsBean">
+    
+    
+        select t1.itemCode itemCode,t1.itemName itemName,t2.dateData dateData,
+     round(case when IFNULL(t3.BedCount,0)=0 then 0 else IFNULL(t2.InpBedDay,0)/t3.BedCount * 1.00 end,2) count 
+			from
+            (
+            select hcb.id as itemCode, hcb.item_name as itemName from hsp.hsp_config_baseinfo hcb
+            where hcb.id in <include refid="HSPIDS"></include>
+            ) t1
+            left join
+            (
+            select t.hospital hospital, date_format(t.VISIT_DATE,#{dateFormater})  dateData, 
+            sum(Inp_bed_day) InpBedDay 
+		    from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex)
+		    where t.hospital in <include refid="HSPIDS"></include>
+		    AND visit_date >= #{startDate}
+			AND visit_date <![CDATA[<]]> #{endDate}
+			group by t.hospital,dateData 
+			) t2
+			on t1.itemCode = t2.hospital
+			
+			left join
+            (
+            select t.hospital hospital, date_format(t.YEAR,#{dateFormater})  dateData, 
+            	sum(Bed_count) BedCount
+		    from ods.ODS_HOSPITAL_RESOURCE_NEW t
+		    where t.hospital  in <include refid="HSPIDS"></include>
+		    AND DATE_FORMAT(YEAR,'%Y')  =  DATE_FORMAT(#{endDate},'%Y')
+			group by t.hospital,dateData 
+			) t3
+			on t1.itemCode = t3.hospital
+
+        order by t1.itemCode
+    
+    
+    
+    
+    
+		<!-- select t1.itemCode itemCode,t1.itemName itemName,t2.dateData dateData,ifnull(t2.cnt,0) count
+		from
+            (
+            select hcb.id as itemCode, hcb.item_name as itemName from hsp.hsp_config_baseinfo hcb
+            where substr(hcb.id,1,length('${hspId}')) = #{hspId}
+            and length(hcb.id)=10
+            ) t1
+            left join
+            (
+
+             select hospital hospital,round(case when IFNULL(t1.count,0)=0 then 0.00 else IFNULL(t.count,0)/IFNULL(t1.count,0)*1.00 end,2) cnt,t.dateData dateData, from (
+		 SELECT hospital hospital,date_format(t.visit_date,'%Y-%m-%d') dateData,
+		IFNULL(sum(DATEDIFF(Discharge_date_time,Admission_date_time)),0) count
+		FROM dc.inp_visit_record
+		WHERE 1=1
+		and  Discharge_date_time is not null
+		AND substr(Hospital,1,LENGTH ('${hspId}'))= #{hspId}
+		AND Discharge_date_time >= #{startDate}
+		AND Discharge_date_time <![CDATA[<=]]> #{endDate}
+		GROUP BY hospital,date_format(t.visit_date,'%Y-%m-%d')) t
+		right join
+		(SELECT hospital hospital,date_format(t.visit_date,'%Y-%m-%d') dateData,
+			count(*) count
+		FROM dc.bed_record
+		WHERE 1=1
+
+		AND substr(Hospital,1,LENGTH ('${hspId}'))= #{hspId}
+		AND Discharge_date_time >= #{startDate}
+		AND Discharge_date_time <![CDATA[<=]]> #{endDate}
+		GROUP BY hospital,date_format(t.visit_date,'%Y-%m-%d')
+			) t2
+			on t1.itemCode = t2.hospital
+        order by t1.itemCode -->
+	</select>
+<!-- 同比同级别平均值 -->
+	<select id="comparedEchartsAvg" parameterType="Map" resultMap="indicatorsBean">
+		select '000' id,"平均值" itemName,
+		IFNULL(ROUND(AVG(t.countNew),2),0)countNew,
+		IFNULL(ROUND(AVG(t.countOld),2),0)countOld 
+		from(
+			SELECT id,itemname,ROUND(CASE WHEN IFNULL(this_times,0)=0 THEN 0 ELSE this_days/this_times END ,2) countNew,
+			ROUND(CASE WHEN IFNULL(last_times,0)=0 THEN 0 ELSE last_days/last_times END ,2) countOld
+			FROM(SELECT hsp.id AS id,hsp.item_Name itemName,
+			       (SELECT SUM(Inp_bed_day) InpBedDay
+			        from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex) 
+			        WHERE t.visit_date >= #{startDate} 
+			        AND t.visit_date  <![CDATA[<]]> #{endDate}
+			        AND hospital=hsp.id 
+			       ) this_days,
+			       (SELECT sum(Bed_count) BedCount   FROM ods.ODS_HOSPITAL_RESOURCE_NEW t
+			        where DATE_FORMAT(YEAR, '%Y')  = DATE_FORMAT(#{endDate}, '%Y')
+			        AND hospital=hsp.id 
+				   ) this_times,
+			       (SELECT SUM(Inp_bed_day) InpBedDay
+			        from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex) 
+			        WHERE t.visit_date >= CONCAT(DATE_FORMAT(#{startDate},'%Y')-1 ,DATE_FORMAT(#{startDate},'-%m-%d'),' 00:00:00.0')
+			        AND t.visit_date  <![CDATA[<]]> CONCAT(DATE_FORMAT(#{endDate},'%Y')-1 ,DATE_FORMAT(#{endDate},'-%m-%d'),' 23:59:59.0')
+			        AND hospital=hsp.id 
+			        ) last_days ,
+			      (SELECT sum(Bed_count) BedCount   FROM ods.ODS_HOSPITAL_RESOURCE_NEW t
+			       WHERE  DATE_FORMAT(YEAR, '%Y')  = (DATE_FORMAT(#{endDate}, '%Y') -1)
+			       AND hospital=hsp.id 
+				  ) last_times
+			FROM hsp.hsp_config_baseinfo hsp  
+			where LENGTH(hsp.id)=10
+			and  hsp.comm_config_unitgrade_id=(select comm_config_unitgrade_id from hsp.hsp_config_baseinfo 
+			where item_Name=#{hspName})
+			 ) a
+			) t
+
+union all
+
+SELECT id,itemname,ROUND(CASE WHEN IFNULL(this_times,0)=0 THEN 0 ELSE this_days/this_times END ,2) countNew,
+ROUND(CASE WHEN IFNULL(last_times,0)=0 THEN 0 ELSE last_days/last_times END ,2) countOld
+FROM(SELECT hsp.id AS id,hsp.item_Name itemName,
+       (SELECT SUM(Inp_bed_day) InpBedDay
+        from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex) 
+        WHERE t.visit_date >= #{startDate} 
+        AND t.visit_date  <![CDATA[<]]> #{endDate}
+        AND hospital=hsp.id 
+       ) this_days,
+       (SELECT sum(Bed_count) BedCount   FROM ods.ODS_HOSPITAL_RESOURCE_NEW t
+        where DATE_FORMAT(YEAR, '%Y')  = DATE_FORMAT(#{endDate}, '%Y')
+        AND hospital=hsp.id 
+	   ) this_times,
+       (SELECT SUM(Inp_bed_day) InpBedDay
+        from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex) 
+        WHERE t.visit_date >= CONCAT(DATE_FORMAT(#{startDate},'%Y')-1 ,DATE_FORMAT(#{startDate},'-%m-%d'),' 00:00:00.0')
+        AND t.visit_date  <![CDATA[<]]> CONCAT(DATE_FORMAT(#{endDate},'%Y')-1 ,DATE_FORMAT(#{endDate},'-%m-%d'),' 23:59:59.0')
+        AND hospital=hsp.id 
+        ) last_days ,
+      (SELECT sum(Bed_count) BedCount   FROM ods.ODS_HOSPITAL_RESOURCE_NEW t
+       WHERE  DATE_FORMAT(YEAR, '%Y')  = (DATE_FORMAT(#{endDate}, '%Y') -1)
+       AND hospital=hsp.id 
+	  ) last_times
+FROM hsp.hsp_config_baseinfo hsp  
+where LENGTH(hsp.id)=10
+and  hsp.comm_config_unitgrade_id=(select comm_config_unitgrade_id from hsp.hsp_config_baseinfo 
+where item_Name=#{hspName})
+ ) a
+	</select>
+</mapper>

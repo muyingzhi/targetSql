@@ -1,17 +1,33 @@
 <template>
   <div id="app">
-    <img src="./assets/logo.png">
-    <HelloWorld/>
+    <left-nav></left-nav>
+    <div class="right" :style="{width: screenWidth + 'px'}">
+      <router-view/>
+    </div>
   </div>
 </template>
 
 <script>
-import HelloWorld from './components/HelloWorld'
+import LeftNav from './components/left-nav.vue';
 
 export default {
   name: 'App',
   components: {
-    HelloWorld
+    LeftNav
+  },
+  data: function () {
+    return {
+      screenWidth:1000
+    };
+  },
+  mounted: function () {
+    var that = this;
+    this.screenWidth= document.body.clientWidth - 255;
+    window.onresize = () => {
+            return (() => {
+              this.screenWidth = document.body.clientWidth - 255;
+            })();
+          };
   }
 }
 </script>
@@ -24,5 +40,10 @@ export default {
   text-align: center;
   color: #2c3e50;
   margin-top: 60px;
+}
+.right {
+  margin-left: 150px;
+  height:100%;
+  overflow: scroll;
 }
 </style>

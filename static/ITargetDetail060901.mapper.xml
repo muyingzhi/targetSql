@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.tianjian.ods.dao.targetdetails.ITargetDetail0609Dao01">
+	<sql id="HSPIDS">
+		<foreach collection="hspIds" index="index" item="hsp" open="(" close=")" separator=",">
+			#{hsp}
+		</foreach>
+	</sql>
+	<resultMap id="indicatorsBean" type="com.tianjian.ods.bean.IndicatorsBean"></resultMap>
+    <select id="get0609pieEcharts3" parameterType="Map" resultMap="indicatorsBean">
+
+     SELECT t1.itemCode itemCode,t1.itemName itemName,IFNULL(t2.cnt,0) COUNT
+		FROM
+			(SELECT hcb.class_code AS itemCode, hcb.class_name AS itemName
+			FROM ods.BILL_ITEM_CLASS_DICT hcb
+		 	
+		     ) t1
+			LEFT JOIN
+			(SELECT t.Item_class itemCode, ROUND(IFNULL(SUM(Outp_amount),0)/10000,2)  cnt
+			FROM ods.outp_income_item_class_theme t
+		  	where t.hospital IN <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<=]]> #{endDate}
+			GROUP BY t.Item_class 
+			) t2
+			ON t1.itemCode = t2.itemCode
+			 where t2.cnt>0
+		ORDER BY t1.itemCode
+    
+
+	</select>
+    
+
+	<select id="get0101pieEcharts3" parameterType="Map" resultMap="indicatorsBean">
+    
+    select SUM(t.outp_count) count,t.charge_type itemName
+		
+			from ods.outp_charge_type_theme t
+		  	where t.hospital IN <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<=]]> #{endDate}
+			group by t.charge_type
+
+	</select>
+
+    <select id="pieEchartsHsp1" parameterType="Map" resultMap="indicatorsBean">
+    
+    select t1.itemCode itemCode,t1.itemName itemName,ifnull(t2.cnt,0) count
+		from
+			(select hcb.id as itemCode, hcb.item_name as itemName
+			from hsp.hsp_config_baseinfo hcb
+		 	where hcb.id IN <include refid="HSPIDS"></include>
+		 	AND LENGTH(hcb.id)=10
+		     ) t1
+			left join
+			(select t.hospital hospital, round(IFNULL(SUM(${field}),0)/10000,2) cnt
+			from ods.ods_hospital_income t force index(hospital_income_sumindex)
+		  	where t.hospital IN <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<=]]> #{endDate}
+			group by t.hospital
+			) t2
+			on t1.itemCode = t2.hospital
+			where t2.cnt>0
+		order by t1.itemCode
+
+	</select>
+    <select id="pieEchartsHsp2" parameterType="Map" resultMap="indicatorsBean">
+		  SELECT t1.itemCode itemCode,t1.itemName itemName,IFNULL(t2.cnt,0) COUNT
+		FROM
+			(SELECT hcb.class_code AS itemCode, hcb.class_name AS itemName
+			FROM ods.BILL_ITEM_CLASS_DICT hcb
+		 	
+		     ) t1
+			LEFT JOIN
+			(SELECT t.Item_class itemCode, ROUND(IFNULL(SUM(inp_amount),0)/10000,2)  cnt
+			FROM ods.inp_income_item_class_theme t
+		  	where t.hospital IN <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<=]]> #{endDate}
+			GROUP BY t.Item_class 
+			) t2
+			ON t1.itemCode = t2.itemCode
+			 where t2.cnt>0
+		ORDER BY t1.itemCode
+			
+	</select>
+	
+	<select id="pieEchartsHsp3" parameterType="Map" resultMap="indicatorsBean">
+		  SELECT t1.itemCode itemCode,t1.itemName itemName,IFNULL(t2.cnt,0) COUNT
+		FROM
+			(SELECT hcb.class_code AS itemCode, hcb.class_name AS itemName
+			FROM ods.BILL_ITEM_CLASS_DICT hcb
+		     ) t1
+			LEFT JOIN
+			(SELECT t.Item_class itemCode, ROUND(IFNULL(SUM(billing_amount),0)/10000,2)  cnt
+			FROM ods.inp_billing_item_class_theme t
+		  	where t.hospital IN <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<=]]> #{endDate}
+			GROUP BY t.Item_class 
+			) t2
+			ON t1.itemCode = t2.itemCode
+			 where t2.cnt>0
+		ORDER BY t1.itemCode
+			
+	</select>
+	
+
+   <select id="pieEchartsDept1" parameterType="Map" resultMap="indicatorsBean">
+
+    	SELECT t1.itemCode itemCode,t1.itemName itemName,IFNULL(t2.cnt,0) count FROM
+		 (
+		 	SELECT CONCAT(b.hospital,'-',b.dept_code) itemCode,b.dept_name itemName
+		 	FROM ods.dept_dict b
+		 	WHERE b.hospital IN <include refid="HSPIDS"></include>
+		 ) t1
+		 LEFT JOIN
+		 (
+		 	SELECT CONCAT(t.hospital,'-',t.dept_code) itemCode,round(IFNULL(SUM(${field}),0)/10000,2) cnt
+		 	from ods.ods_hospital_income t force index(hospital_income_sumindex) 
+		 	where t.hospital IN <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<=]]> #{endDate}
+		 	GROUP BY CONCAT(t.hospital,'-',t.dept_code)
+    		
+		 ) t2
+		 ON t1.itemCode=t2.itemCode
+		 where t2.cnt>0
+		 order by t2.cnt DESC
+		LIMIT 0, 10 
+    
+
+	</select>
+
+    <select id="pieEchartsHspOperation1" parameterType="Map" resultMap="indicatorsBean">
+    
+    select t1.itemCode itemCode,t1.itemName itemName,ifnull(t2.cnt,0) count
+		from
+			(select hcb.id as itemCode, hcb.item_name as itemName
+			from hsp.hsp_config_baseinfo hcb
+		 	where hcb.id IN <include refid="HSPIDS"></include>
+		 	AND LENGTH(hcb.id)=10
+		     ) t1
+			left join
+			(select t.hospital hospital, IFNULL(SUM(Inp_ops_count),0) cnt
+			from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex)
+		  	where t.hospital IN <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<=]]> #{endDate}
+			group by t.hospital
+			) t2
+			on t1.itemCode = t2.hospital
+			 where t2.cnt>0
+		order by t1.itemCode
+
+
+	</select>
+
+
+    
+    <select id="pieEchartsHspOperation2" parameterType="Map" resultMap="indicatorsBean">
+    
+   SELECT SUM(OPERATION_COUNT) count, CASE 
+  WHEN OPERATION_GRADE ='1' THEN 'Ⅰ级手术'
+  WHEN OPERATION_GRADE ='2' THEN 'Ⅱ级手术'
+  WHEN OPERATION_GRADE ='3' THEN 'Ⅲ级手术'
+  WHEN OPERATION_GRADE ='4' THEN 'Ⅳ级手术'
+  ELSE '未知等级手术'
+	 END   itemName
+
+	from ods.ods_OPERATION_THEME t force index(OPERATION_THEME_sumindex)
+		where t.hospital IN <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<=]]> #{endDate}
+	GROUP BY itemName
+ having count>0
+
+	</select>
+
+
+
+
+   <select id="pieEchartsDeptOperation1" parameterType="Map" resultMap="indicatorsBean">
+ 
+    	SELECT t1.itemCode itemCode,t1.itemName itemName,IFNULL(t2.cnt,0) count FROM
+		 (
+		 	SELECT CONCAT(b.hospital,'-',b.dept_code) itemCode,b.dept_name itemName
+		 	FROM ods.dept_dict b
+		 	WHERE b.hospital IN <include refid="HSPIDS"></include>
+		 ) t1
+		 LEFT JOIN
+		 (
+		 	SELECT CONCAT(t.hospital,'-',t.dept_code) itemCode,IFNULL(SUM(Inp_ops_count),0) cnt
+		 	from ods.ods_WORK_LOAD t force index(WORK_LOAD_sumindex) 
+		 	where t.hospital IN <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<=]]> #{endDate}
+		 	GROUP BY CONCAT(t.hospital,'-',t.dept_code)
+    		
+		 ) t2
+		 ON t1.itemCode=t2.itemCode
+		  where t2.cnt>0
+		  
+		 order by t2.cnt DESC
+		 
+		LIMIT 0, 10 
+    
+		
+
+	</select>
+
+  <select id="tbEchartsOperationType" parameterType="Map" resultMap="indicatorsBean">
+
+    
+   SELECT t1.itemName itemName,t1.COUNT countNew,t2.COUNT countOld FROM (
+      SELECT SUM(OPERATION_COUNT) COUNT, CASE 
+  WHEN OPERATION_GRADE ='1' THEN 'Ⅰ级手术'
+  WHEN OPERATION_GRADE ='2' THEN 'Ⅱ级手术'
+  WHEN OPERATION_GRADE ='3' THEN 'Ⅲ级手术'
+  WHEN OPERATION_GRADE ='4' THEN 'Ⅳ级手术'
+  ELSE '未知等级手术'
+	 END   itemName
+	from ods.ods_OPERATION_THEME t force index(OPERATION_THEME_sumindex)
+	WHERE t.hospital in <include refid="HSPIDS"></include>
+	 AND t.visit_date>= #{startDate}
+		AND t.visit_date <![CDATA[<=]]> #{endDate}
+	GROUP BY itemName
+   ) t1
+	LEFT JOIN (	 
+	   SELECT SUM(OPERATION_COUNT) COUNT, CASE 
+  WHEN OPERATION_GRADE ='1' THEN 'Ⅰ级手术'
+  WHEN OPERATION_GRADE ='2' THEN 'Ⅱ级手术'
+  WHEN OPERATION_GRADE ='3' THEN 'Ⅲ级手术'
+  WHEN OPERATION_GRADE ='4' THEN 'Ⅳ级手术'
+  ELSE '未知等级手术'
+	 END   itemName
+	from ods.ods_OPERATION_THEME t force index(OPERATION_THEME_sumindex)
+	WHERE t.hospital in <include refid="HSPIDS"></include>
+	AND t.visit_date>= concat(cast(date_format(#{startDate},'%Y') - 1 as CHAR),date_format(#{startDate},'-%m-%d'))
+		AND t.visit_date <![CDATA[<=]]> CONCAT(CAST(DATE_FORMAT(#{endDate},'%Y') - 1 as CHAR),date_format(#{endDate},'-%m-%d'),' 23:59:59.0')
+	GROUP BY itemName
+	) t2
+	
+	ON t1.itemName=t2.itemName
+
+	</select>
+
+</mapper>

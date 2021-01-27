@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.tianjian.ods.dao.targetdetails.ITargetDetail0302Dao">
+	<sql id="HSPIDS">
+		<foreach collection="hspIds" index="index" item="hsp" open="(" close=")" separator=",">
+			#{hsp}
+		</foreach>
+	</sql>
+	<resultMap id="indicatorsBean" type="com.tianjian.ods.bean.IndicatorsBean"></resultMap>
+    <select id="companyTable" parameterType="Map" resultMap="indicatorsBean">
+    	select t1.parentItemCode itemCode,t1.parentItemName itemName,sum(ifnull(t2.cnt,0)) count
+		from
+		  (
+		    select hcb.id as itemCode, hcb.item_name as itemName, parent.id as parentItemCode, parent.item_name as parentItemName, hcb.seq_no as seqNo
+			from hsp.hsp_config_baseinfo hcb, hsp.hsp_config_baseinfo parent
+			where hcb.parent_item_code = parent.id 
+		and hcb.id in <include refid="HSPIDS"></include>
+		and length(hcb.item_code)=10
+		) t1
+		  left join
+		  (
+		    select t.hospital hospital, sum(Cancer_ops_accordance_count) cnt
+		    from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		    where t.hospital in <include refid="HSPIDS"></include>
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<]]> #{endDate} 
+			group by t.hospital
+		  ) t2
+		  on t1.itemCode = t2.hospital
+		group by t1.parentItemName
+		order by t1.seqNo
+	</select>
+
+<select id="firstRequestTable" parameterType="Map" resultMap="indicatorsBean">
+    
+      select t1.itemCode itemCode,t1.itemName itemName,ifnull(t2.cnt,0) count
+		from
+		  (
+		    select hcb.id as itemCode, hcb.item_name as itemName, hcb.seq_no as seqNo
+			from hsp.hsp_config_baseinfo hcb
+			where hcb.parent_item_code = #{parentId}
+		and hcb.id in <include refid="HSPIDS"></include>
+		and length(hcb.item_code)=10
+		  ) t1
+		  left join
+		  (
+		    select t.hospital hospital, sum(Cancer_ops_accordance_count) cnt
+		    from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		    where t.hospital in (select id from hsp.hsp_config_baseinfo where parent_item_code = #{parentId} and id in <include refid="HSPIDS"></include> and length(item_code)=10)
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<]]> #{endDate} 
+			group by t.hospital
+		  ) t2
+		  on t1.itemCode = t2.hospital
+		order by t1.seqNo
+    
+<!-- 		select t1.itemCode itemCode,t1.itemName itemName,ifnull(t2.cnt,0) count
+		from (
+			select hcb.id as itemCode, hcb.item_name as itemName
+			from hsp.hsp_config_baseinfo hcb
+		  	where substr(hcb.id,0,length('${hspId}'))= #{hspId} and length(hcb.id)=10
+		) t1
+		left join (
+			select t.hospital hospital, count(*)cnt
+			from dc.physical_exam_record t
+		   	where substr(t.hospital,0,length('${hspId}'))=#{hspId}
+		 and t.register_date > #{startDate}
+		 and t.register_date <![CDATA[<=]]> #{endDate}
+		 group by t.hospital
+		) t2 on t1.itemCode = t2.hospital
+		order by t1.itemCode -->
+	</select>
+	<select id="getSecondData" parameterType="Map" resultMap="indicatorsBean">
+
+		select t1.itemCode itemCode,t1.itemName itemName,ifnull(t2.cnt,0) count from
+		 (
+		 	select concat(b.hospital,'-',b.dept_code) itemCode,b.dept_name itemName
+		 	from ods.dept_dict b
+		 	where b.hospital=#{hspId}
+		 ) t1
+		 left join
+		 (
+		 	select concat(t.hospital,'-',t.dept_code) itemCode,SUM(Cancer_ops_accordance_count) cnt 
+		 	from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex) 
+		 	where t.hospital= #{hspId}
+			and t.visit_date >= #{startDate}
+			and t.visit_date<![CDATA[<]]> #{endDate} 
+		 	group by concat(t.hospital,'-',t.dept_code)
+		 ) t2
+		 on t1.itemCode=t2.itemCode
+		 order by ifnull(t2.cnt,0) desc
+
+	</select>
+	<select id="getThirdData"  parameterType="Map" resultMap="indicatorsBean">
+
+	</select>
+	<select id="comparedEcharts" parameterType="Map" resultMap="indicatorsBean">
+
+			select hsp.id,hsp.item_Name itemName,
+		(select sum(Cancer_ops_accordance_count) thisYear
+		from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		where
+		t.visit_date>= #{startDate}
+		and t.visit_date <![CDATA[<]]> #{endDate}
+		and hospital=hsp.id) countNew,
+		(select sum(Cancer_ops_accordance_count)
+		from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		where
+		t.visit_date>= concat(cast(date_format(#{startDate},'%Y') - 1 as CHAR),date_format(#{startDate},'-%m-%d'))
+		and t.visit_date <![CDATA[<]]> concat(date_format(#{endDate},'%Y') - 1 ,date_format(#{endDate},'-%m-%d'),' 23:59:59.0')
+		and hospital=hsp.id) countOld
+		from hsp.hsp_config_baseinfo hsp
+		where hsp.id in <include refid="HSPIDS"></include>
+
+	</select>
+	<select id="pieEcharts1" parameterType="Map" resultMap="indicatorsBean">
+	select t1.itemCode itemCode,t1.itemName itemName,ifnull(t2.cnt,0) count
+		from
+			(select hcb.id as itemCode, hcb.item_name as itemName
+			from hsp.hsp_config_baseinfo hcb
+		 	where hcb.id IN <include refid="HSPIDS"></include>
+		  	and length(hcb.id)=10) t1
+			left join
+			(select t.hospital hospital, SUM(Cancer_ops_accordance_count) cnt
+			from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex) 
+		  	where t.hospital IN <include refid="HSPIDS"></include>
+			and DATE_FORMAT(visit_date, '%Y') = DATE_FORMAT(#{endDate},'%Y') 
+			group by t.hospital
+			) t2
+			on t1.itemCode = t2.hospital
+		order by t1.itemCode
+	
+	</select>
+	<select id="pieEcharts2" parameterType="Map" resultMap="indicatorsBean">
+
+	</select>
+	<select id="lineEcharts" parameterType="Map" resultMap="indicatorsBean">
+		select t1.itemCode itemCode,t1.itemName itemName,t2.dateData dateData,ifnull(t2.cnt,0) count
+			from
+            (
+            select hcb.id as itemCode, hcb.item_name as itemName from hsp.hsp_config_baseinfo hcb
+            where hcb.id IN <include refid="HSPIDS"></include>
+            and length(hcb.id)=10
+            ) t1
+            left join
+            (
+            select t.hospital hospital, date_format(t.VISIT_DATE,#{dateFormater})  dateData, SUM(Cancer_ops_accordance_count) cnt
+		    from ods.ods_TREAT_EFFECT t force index(TREAT_EFFECT_sumindex)
+		    where t.hospital IN <include refid="HSPIDS"></include>
+		   AND visit_date >= #{startDate}
+		AND visit_date <![CDATA[<]]> #{endDate}
+			group by t.hospital,dateData 
+			) t2
+			on t1.itemCode = t2.hospital
+        order by t1.itemCode
+        
+	</select>
+
+</mapper>
